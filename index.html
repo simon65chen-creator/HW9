@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UEFI 2.10 規格與系統架構全景解析 - HTML 簡報</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 30, 49, 0.75);
+      --card-border: rgba(56, 189, 248, 0.2);
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-gradient: linear-gradient(135deg, #38bdf8, #818cf8);
+      --accent: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top Progress Bar */
+    .progress-bar-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      z-index: 100;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 12.5%;
+      background: var(--primary-gradient);
+      transition: width 0.35s ease;
+    }
+
+    /* Header Nav */
+    header {
+      position: fixed;
+      top: 8px;
+      left: 0;
+      right: 0;
+      padding: 12px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 90;
+      background: linear-gradient(to bottom, rgba(9, 13, 22, 0.8), transparent);
+    }
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+      text-transform: uppercase;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--text);
+      border-color: var(--primary);
+    }
+    .btn.active {
+      background: var(--primary);
+      color: #000;
+      font-weight: 600;
+    }
+
+    /* Main Deck Stage */
+    .deck-container {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 48px 70px;
+    }
+
+    .slide {
+      position: absolute;
+      width: 100%;
+      max-width: 1180px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(24px) scale(0.98);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+
+    /* Typography & Cards */
+    .slide-badge {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .slide-title {
+      font-size: 2.3rem;
+      font-weight: 800;
+      line-height: 1.25;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .slide-subtitle {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card:hover {
+      border-color: rgba(56, 189, 248, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    }
+    .card h3 {
+      font-size: 1.15rem;
+      color: var(--primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card p, .card li {
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      line-height: 1.65;
+    }
+    .card ul {
+      list-style-type: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card ul li::before {
+      content: "▹";
+      color: var(--primary);
+      margin-right: 8px;
+    }
+
+    /* Boot Pipeline Timeline */
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .timeline-step {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 14px 10px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .timeline-step:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--primary);
+    }
+    .step-num {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .step-name {
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin: 4px 0 6px;
+      color: #fff;
+    }
+    .step-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* Hierarchy Tree for Keys */
+    .key-hierarchy {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .key-node {
+      background: var(--card-bg);
+      border-left: 4px solid var(--primary);
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .key-badge {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .badge-pk { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+    .badge-kek { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+    .badge-db { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+    .badge-dbx { background: rgba(147, 51, 234, 0.2); color: #d8b4fe; }
+
+    /* Footer Navigation */
+    footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 16px 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to top, rgba(9, 13, 22, 0.95), transparent);
+      z-index: 90;
+    }
+    .slide-counter {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+    .nav-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .nav-btn {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text);
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover {
+      background: var(--primary);
+      color: #000;
+      border-color: var(--primary);
+    }
+
+    /* Speaker Notes Drawer */
+    .notes-drawer {
+      position: fixed;
+      bottom: -320px;
+      left: 0;
+      right: 0;
+      height: 280px;
+      background: #0f172a;
+      border-top: 2px solid var(--primary);
+      padding: 24px 36px;
+      transition: bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 105;
+      overflow-y: auto;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+    }
+    .notes-drawer.open {
+      bottom: 0;
+    }
+    .notes-drawer h4 {
+      font-size: 0.9rem;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .notes-text {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: #e2e8f0;
+    }
+
+    /* Overview Modal Grid */
+    .overview-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(9, 13, 22, 0.95);
+      backdrop-filter: blur(16px);
+      z-index: 200;
+      display: none;
+      padding: 60px 40px;
+      overflow-y: auto;
+    }
+    .overview-modal.open {
+      display: block;
+    }
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .thumb-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .thumb-card:hover {
+      border-color: var(--primary);
+      transform: scale(1.03);
+    }
+    .thumb-card.active-thumb {
+      border-color: var(--primary);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+    }
+    .thumb-num {
+      font-size: 0.75rem;
+      color: var(--primary);
+      font-weight: 700;
+    }
+    .thumb-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-top: 6px;
+      color: #fff;
+    }
+
+    .highlight-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-badge">
+      <span>●</span> LLM Wiki · UEFI 2.10 Architecture
+    </div>
+    <div class="controls">
+      <button class="btn" id="btnNotes" title="快捷鍵: N">📝 講者備忘 (N)</button>
+      <button class="btn" id="btnOverview" title="快捷鍵: O 或 Esc">⊞ 總覽 (O)</button>
+      <button class="btn" id="btnFullscreen" title="快捷鍵: F">⛶ 全螢幕 (F)</button>
+    </div>
+  </header>
+
+  <!-- Deck Container -->
+  <main class="deck-container">
+
+    <!-- Slide 1: Cover -->
+    <section class="slide active" data-notes="歡迎大家！今天我們將全方位解析 UEFI Specification Release 2.10 的核心技術架構。從開機生命週期、EFI 系統表核心服務，到驅動程式模型與 Secure Boot 信任鏈，一窺現代計算平台韌體的軟體工程典範。">
+      <div class="slide-badge">Presentation Deck · Architecture Deep Dive</div>
+      <h1 class="slide-title" style="font-size: 3rem;">UEFI 2.10 規格與系統架構全景解析</h1>
+      <p class="slide-subtitle">現代平台韌體標準、開機生命週期與信任鏈機制之深度研析</p>
+      <div class="grid-3" style="margin-top: 16px;">
+        <div class="card">
+          <h3>⚡ 模組化微內核</h3>
+          <p>徹底告別 16-bit 實模式 Legacy BIOS，具備 C 語言執行環境、非同步事件驅動與動態 Protocol 介面。</p>
+        </div>
+        <div class="card">
+          <h3>🛡️ 內建硬體信任鏈</h3>
+          <p>標準化 Secure Boot 金鑰階層與 Authenticode 數位簽章驗證，奠定現代 OS 防護基石。</p>
+        </div>
+        <div class="card">
+          <h3>🌐 雲端與新架構拓展</h3>
+          <p>2.10 版本正式引入機密運算（Confidential Computing）、Redfish 遠端管理與 RISC-V / LoongArch 支援。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 2: Boot Phases -->
+    <section class="slide" data-notes="請特別注意第 6 階段 RT 前的 ExitBootServices() 呼叫。在此邊界之前，Boot Services 是完整的執行環境；在此之後，所有開機專用記憶體全數釋放給作業系統，僅保留 Runtime Services。">
+      <div class="slide-badge">Boot Flow Lifecycle</div>
+      <h2 class="slide-title">七大開機執行階段生命週期</h2>
+      <p class="slide-subtitle">從 Reset Vector 唯讀韌體代碼逐步建立信任根，平滑交接至作業系統核心</p>
+      
+      <div class="timeline">
+        <div class="timeline-step">
+          <div class="step-num">PHASE 1</div>
+          <div class="step-name">SEC</div>
+          <div class="step-desc">重設向量、建立 Cache-as-RAM (CAR)、平台信任根驗證</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-num">PHASE 2</div>
+          <div class="step-name">PEI</div>
+          <div class="step-desc">PEIM 模組初始化 DRAM 與晶片組，產出 HOB 清單</div>
+        </div>
+        <div class="timeline-step" style="border-color: var(--primary);">
+          <div class="step-num" style="color:var(--primary);">PHASE 3</div>
+          <div class="step-name" style="color:var(--primary);">DXE</div>
+          <div class="step-desc">核心執行環境，初始化 System Table 並載入各硬體驅動</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-num">PHASE 4</div>
+          <div class="step-name">BDS</div>
+          <div class="step-desc">Boot Manager 解析 Boot#### 與 BootOrder，啟動開機選項</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-num">PHASE 5</div>
+          <div class="step-name">TSL</div>
+          <div class="step-desc">OS Loader 接管控制權，呼叫 Boot Services 載入核心</div>
+        </div>
+        <div class="timeline-step" style="border-color: var(--accent);">
+          <div class="step-num" style="color:var(--accent);">PHASE 6</div>
+          <div class="step-name" style="color:var(--accent);">RT</div>
+          <div class="step-desc">ExitBootServices() 釋放記憶體，僅保留 Runtime Services</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-num">PHASE 7</div>
+          <div class="step-name">AL</div>
+          <div class="step-desc">系統崩潰或重啟時由韌體進行災難復原</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 12px; background: rgba(56, 189, 248, 0.08);">
+        <p><strong>關鍵交接邊界 (Boundary)</strong>：在 TSL 邁入 RT 階段時，OS Loader 必須觸發 <code>ExitBootServices()</code>。此時所有開機服務記憶體被釋放並交給作業系統核心管理，標誌著平台韌體從「控制主導」轉為「輔助執行」。</p>
+      </div>
+    </section>
+
+    <!-- Slide 3: EFI System Table -->
+    <section class="slide" data-notes="EFI_SYSTEM_TABLE 是所有 UEFI 應用程式與驅動程式的第一個指標參數。其中 Boot Services 涵蓋最龐大的微內核功能，而 Runtime Services 是在 OS 啟動後唯一留在記憶體中的韌體介面。">
+      <div class="slide-badge">Core Architecture</div>
+      <h2 class="slide-title">EFI 系統表結構 (EFI System Table)</h2>
+      <p class="slide-subtitle">所有 UEFI 應用程式與驅動程式存取韌體與硬體能力的標準核心分發入口</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>📦 Boot Services Table</h3>
+          <p style="margin-bottom:8px; font-weight:600; color:var(--primary);">僅在 ExitBootServices() 前有效</p>
+          <ul>
+            <li><strong>記憶體管理</strong>：<code>AllocatePages</code>, <code>GetMemoryMap</code></li>
+            <li><strong>非同步事件</strong>：<code>CreateEvent</code>, <code>SetTimer</code>, TPL 優先級</li>
+            <li><strong>物件控制代碼</strong>：Handle & Protocol 資料庫</li>
+            <li><strong>映像生命週期</strong>：<code>LoadImage</code>, <code>StartImage</code></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>⚡ Runtime Services Table</h3>
+          <p style="margin-bottom:8px; font-weight:600; color:var(--accent);">OS 運行期間全程常駐記憶體</p>
+          <ul>
+            <li><strong>變數服務</strong>：<code>GetVariable</code>, <code>SetVariable</code> (NVRAM)</li>
+            <li><strong>時間服務</strong>：<code>GetTime</code>, <code>SetWakeupTime</code> (RTC)</li>
+            <li><strong>膠囊更新</strong>：<code>UpdateCapsule</code> (韌體帶內升級)</li>
+            <li><strong>虛擬位址重對映</strong>：<code>SetVirtualAddressMap</code></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>📑 Configuration Tables</h3>
+          <p style="margin-bottom:8px; font-weight:600; color:var(--warning);">標準硬體描述資料表介面</p>
+          <ul>
+            <li><strong>ACPI Tables</strong>：RSDP, DSDT, SSDT 電源與硬體配置表</li>
+            <li><strong>SMBIOS Tables</strong>：提供主機板、BIOS、記憶體規格資訊</li>
+            <li><strong>Device Tree / Device Paths</strong>：嵌入式與非 x86 硬體描述</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 4: Protocols & Driver Model -->
+    <section class="slide" data-notes="Driver Binding Protocol 的三步函式 Supported, Start, Stop 實現了現代物件導向式驅動架構。主機板韌體無需預載所有周邊裝置驅動，只要動態檢測硬體 Handle 並綁定對應 Protocol 即可。">
+      <div class="slide-badge">Extensibility & Modularity</div>
+      <h2 class="slide-title">物件導向協議與驅動程式模型</h2>
+      <p class="slide-subtitle">基於 COM 概念之 Handle-Protocol 資料庫，達成高內聚、低耦合硬體抽象</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>🧩 Handle 與 Protocol 架構</h3>
+          <ul>
+            <li><strong>Handle (控制代碼)</strong>：代表系統中抽象的實體控制器或邏輯設備（如 PCI 總線、硬碟分區）。</li>
+            <li><strong>Protocol (協議介面)</strong>：一組由 128-bit GUID 唯一識別的函式指標結構體（如 <code>BlockIoProtocol</code>, <code>GraphicsOutputProtocol</code>）。</li>
+            <li><strong>Handle Database</strong>：動態關聯各 Handle 與其掛載的多個 Protocols，支援動態擴展與查詢。</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>⚙️ UEFI Driver Binding Protocol</h3>
+          <p style="margin-bottom:12px;">標準驅動程式透過三個核心函式生命週期驅動設備：</p>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px;">
+              <span class="highlight-pill">Supported()</span> 測試驅動是否支援目標設備 Handle
+            </div>
+            <div style="background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px;">
+              <span class="highlight-pill">Start()</span> 綁定控制器並產生子 Handle 或子 Protocol
+            </div>
+            <div style="background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px;">
+              <span class="highlight-pill">Stop()</span> 釋放資源並安全卸載驅動程式
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 5: GPT Partitioning -->
+    <section class="slide" data-notes="GPT 不僅解除了 MBR 2TB 的定址瓶頸，還內建了頭尾雙份 GPT Header 與 CRC32 校驗，即便磁碟開頭資料受損，也能從備份分區表無失真還原。">
+      <div class="slide-badge">Storage Architecture</div>
+      <h2 class="slide-title">GUID Partition Table (GPT) 磁碟分區</h2>
+      <p class="slide-subtitle">規範第 5 章標準，徹底打破傳統 MBR 限制並引入雙向冗餘災難校驗</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>🛡️ Protective MBR (LBA 0)</h3>
+          <p>在磁碟第 0 扇區保留保護性 MBR，標記整個磁碟為 <code>0xEE</code> 類型。防止不支援 GPT 的老舊磁碟分割工具誤將磁碟視為未格式化而覆寫資料。</p>
+        </div>
+
+        <div class="card">
+          <h3>📑 Primary GPT (LBA 1 ~ 33)</h3>
+          <ul>
+            <li><strong>GPT Header (LBA 1)</strong>：記錄 Unique Disk GUID、分區表大小與自身 CRC32 校驗和。</li>
+            <li><strong>Partition Entries (LBA 2~33)</strong>：定義最多 128 個分區項，每項具備 Type GUID 與 Unique GUID。</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>🔄 Backup GPT (磁碟末端)</h3>
+          <p>在磁碟最後的 33 個 LBA 保留鏡像備份（Secondary GPT Header 與 Entries）。當主分區表損壞時，韌體自動偵測並依賴備份無縫復原。</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h3>📊 GPT vs. MBR 核心對比</h3>
+        <p>• <strong>最大磁碟容量</strong>：MBR 僅支援 2.2 TB (32-bit LBA) ➔ <strong>GPT 支援高達 9.4 ZB (64-bit LBA)</strong><br>
+        • <strong>主分區數量</strong>：MBR 限制 4 個主分區 ➔ <strong>GPT 預設支援 128 個獨立分區</strong><br>
+        • <strong>完整性校驗</strong>：MBR 無校驗機制 ➔ <strong>GPT 具備 Header 與 Partition Table 雙重 CRC32 校驗</strong></p>
+      </div>
+    </section>
+
+    <!-- Slide 6: Secure Boot -->
+    <section class="slide" data-notes="特別注意 dbx 黑名單的最高優先權。近年來由於 BootHole 和 BlackLotus 等漏洞，dbx 撤銷清單急遽膨脹，造成許多主機板 SPI Flash NVRAM 空間用盡的挑戰。">
+      <div class="slide-badge">Firmware Security</div>
+      <h2 class="slide-title">Secure Boot 與韌體信任鏈機制</h2>
+      <p class="slide-subtitle">基於非對稱加密金鑰階層，確保開機載入的每一個映像檔均具備數位簽章認證</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>🔑 四層金鑰管理階層</h3>
+          <div class="key-hierarchy">
+            <div class="key-node">
+              <div><strong>PK (Platform Key)</strong><br><small style="color:var(--text-muted);">代表 OEM/主機板製造商，信任根頂點</small></div>
+              <span class="key-badge badge-pk">Root of Trust</span>
+            </div>
+            <div class="key-node">
+              <div><strong>KEK (Key Exchange Key)</strong><br><small style="color:var(--text-muted);">用於簽署與授權更新 db / dbx 安全資料庫</small></div>
+              <span class="key-badge badge-kek">Exchange Key</span>
+            </div>
+            <div class="key-node">
+              <div><strong>db (Authorized Database)</strong><br><small style="color:var(--text-muted);">白名單：受信任之 X.509 憑證或二進位 SHA-256</small></div>
+              <span class="key-badge badge-db">Whitelist</span>
+            </div>
+            <div class="key-node">
+              <div><strong>dbx (Forbidden Database)</strong><br><small style="color:var(--text-muted);">黑名單：優先權最高，符合者立即拒絕載入</small></div>
+              <span class="key-badge badge-dbx">Blacklist</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>🐧 Linux 生態：Shim 與 MOK 機制</h3>
+          <ul>
+            <li><strong>微軟 3rd Party CA 簽名</strong>：全球 PC 預載微軟憑證，因此開源社群由微軟統一為 <code>shimx64.efi</code> 提供簽名。</li>
+            <li><strong>Shim 載入器</strong>：作為第一階 Loader 驗證發行版簽章與 GRUB。</li>
+            <li><strong>MOK (Machine Owner Key)</strong>：提供實體操作介面，允許使用者自行登記信任自編核心與驅動。</li>
+            <li><strong>TPM 2.0 測量開機 (Measured Boot)</strong>：代碼執行前擴展至 TPM PCR 暫存器，提供遠端證明與 BitLocker 解密封印。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 7: UEFI 2.10 Updates -->
+    <section class="slide" data-notes="機密運算的支援是 2.10 規格最重要的企業級里程碑，使 UEFI 能夠直接配合 AMD SEV-SNP 和 Intel TDX 提供硬體隔離等級的虚擬機開機認證。">
+      <div class="slide-badge">Release Highlights</div>
+      <h2 class="slide-title">UEFI 2.10 規格關鍵更新重點</h2>
+      <p class="slide-subtitle">因應現代雲端資料中心、機密運算與多元 CPU 架構之重大演進</p>
+
+      <div class="grid-3">
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.4);">
+          <h3>🛡️ 機密運算 (Ch 38)</h3>
+          <p style="margin-bottom:8px; font-weight:600; color:var(--accent);">Confidential Computing</p>
+          <p>正式標準化硬體隔離虛擬化（AMD SEV-SNP、Intel TDX）開機測量與證明協定，為雲端多租戶安全提供底層硬體認證。</p>
+        </div>
+
+        <div class="card" style="border-color: rgba(56, 189, 248, 0.4);">
+          <h3>🌐 Redfish 服務整合 (Ch 31)</h3>
+          <p style="margin-bottom:8px; font-weight:600; color:var(--primary);">RESTful 帶外管理</p>
+          <p>標準化 Redfish 伺服器管理協定，允許透過現代 RESTful JSON API 遠端配置韌體變數與硬體狀態。</p>
+        </div>
+
+        <div class="card" style="border-color: rgba(245, 158, 11, 0.4);">
+          <h3>🚀 新架構呼叫慣例</h3>
+          <p style="margin-bottom:8px; font-weight:600; color:var(--warning);">RISC-V & LoongArch</p>
+          <p>擴充與深化對開放指令集 RISC-V 以及龍芯架構（LoongArch）的暫存器規範、呼叫慣例與開機流程定義。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 8: Summary & Tradeoffs -->
+    <section class="slide" data-notes="感謝大家的聆聽！UEFI 的架構設計極其宏大精巧，但在超大規模雲端場景下，開源與輕量化的 LinuxBoot 正在崛起。這是韌體架構演進史上最值得持續關注的動態。">
+      <div class="slide-badge">Summary & Outlook</div>
+      <h2 class="slide-title">技術權衡與韌體架構展望</h2>
+      <p class="slide-subtitle">在高度擴展靈活性與系統安全性、開機效率之間的工程平衡</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>⚖️ 當前挑戰與爭議</h3>
+          <ul>
+            <li><strong>龐大代碼量與攻擊面</strong>：數百萬行 C 語言代碼帶來 Bootkit（如 BlackLotus）高價值攻擊目標。</li>
+            <li><strong>閉源生態審查壁壘</strong>：儘管 EDK II 開源，實際出貨仍高度依賴少數 IBV（AMI, Insyde）二進位模組。</li>
+            <li><strong>NVRAM 儲存危機</strong>：黑名單 dbx 快速膨脹，考驗老舊主機板 SPI Flash 容限。</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>🔮 未來韌體演進趨勢</h3>
+          <ul>
+            <li><strong>LinuxBoot / coreboot 興起</strong>：超大規模資料中心（Hyperscalers）逐漸採用 Linux Kernel 作為 Payload，開機時間從分鐘級縮短至秒級。</li>
+            <li><strong>Rust 語言進入韌體層</strong>：以記憶體安全語言重寫 PEI/DXE 核心模組，從根本杜絕記憶體損毀漏洞。</li>
+            <li><strong>端到端遙測與遠端證明</strong>：配合 TPM 與 Confidential Computing 達成全週期零信任開機。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-top:20px; color:var(--text-muted); font-size:0.9rem;">
+        LLM Wiki 知識庫研究衍生專案 · 基於 UEFI Specification 2.10
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer Nav & Counter -->
+  <footer>
+    <div class="slide-counter" id="slideCounter">SLIDE 01 / 08</div>
+    <div class="nav-buttons">
+      <button class="nav-btn" id="btnPrev" title="上一頁 (←)">‹</button>
+      <button class="nav-btn" id="btnNext" title="下一頁 (→ / Space)">›</button>
+    </div>
+  </footer>
+
+  <!-- Speaker Notes Drawer -->
+  <div class="notes-drawer" id="notesDrawer">
+    <h4>
+      <span>🎙️ 講者備忘錄 (Speaker Notes)</span>
+      <span style="font-size:0.8rem; cursor:pointer;" id="btnCloseNotes">✕ 關閉 (N)</span>
+    </h4>
+    <div class="notes-text" id="notesText"></div>
+  </div>
+
+  <!-- Overview Modal -->
+  <div class="overview-modal" id="overviewModal">
+    <div style="max-width:1200px; margin:0 auto 20px; display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="font-size:1.4rem;">簡報頁面總覽 (點擊跳轉)</h2>
+      <button class="btn" id="btnCloseOverview">✕ 關閉總覽 (Esc / O)</button>
+    </div>
+    <div class="overview-grid" id="overviewGrid"></div>
+  </div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const progressBar = document.getElementById('progressBar');
+    const slideCounter = document.getElementById('slideCounter');
+    const notesDrawer = document.getElementById('notesDrawer');
+    const notesText = document.getElementById('notesText');
+    const overviewModal = document.getElementById('overviewModal');
+    const overviewGrid = document.getElementById('overviewGrid');
+
+    let currentSlide = 0;
+    const totalSlides = slides.length;
+
+    // Generate Overview Thumbs
+    slides.forEach((slide, idx) => {
+      const titleElem = slide.querySelector('.slide-title');
+      const title = titleElem ? titleElem.innerText : `Slide ${idx + 1}`;
+      const thumb = document.createElement('div');
+      thumb.className = `thumb-card ${idx === 0 ? 'active-thumb' : ''}`;
+      thumb.innerHTML = `
+        <div class="thumb-num">PAGE 0${idx + 1}</div>
+        <div class="thumb-title">${title}</div>
+      `;
+      thumb.onclick = () => {
+        goToSlide(idx);
+        toggleOverview(false);
+      };
+      overviewGrid.appendChild(thumb);
+    });
+
+    function updateSlide() {
+      slides.forEach((s, i) => {
+        s.classList.toggle('active', i === currentSlide);
+      });
+
+      // Update Counter & Progress
+      slideCounter.innerText = `SLIDE ${String(currentSlide + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
+      progressBar.style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+
+      // Update Notes
+      const notes = slides[currentSlide].getAttribute('data-notes') || '本頁無特定備忘錄。';
+      notesText.innerText = notes;
+
+      // Update Overview Active
+      const thumbs = overviewGrid.querySelectorAll('.thumb-card');
+      thumbs.forEach((t, i) => t.classList.toggle('active-thumb', i === currentSlide));
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function goToSlide(idx) {
+      if (idx >= 0 && idx < totalSlides) {
+        currentSlide = idx;
+        updateSlide();
+      }
+    }
+
+    function toggleNotes() {
+      notesDrawer.classList.toggle('open');
+      document.getElementById('btnNotes').classList.toggle('active');
+    }
+
+    function toggleOverview(force) {
+      const isOpen = force !== undefined ? force : !overviewModal.classList.contains('open');
+      overviewModal.classList.toggle('open', isOpen);
+      document.getElementById('btnOverview').classList.toggle('active', isOpen);
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // Event Listeners
+    document.getElementById('btnNext').onclick = nextSlide;
+    document.getElementById('btnPrev').onclick = prevSlide;
+    document.getElementById('btnNotes').onclick = toggleNotes;
+    document.getElementById('btnCloseNotes').onclick = toggleNotes;
+    document.getElementById('btnOverview').onclick = () => toggleOverview();
+    document.getElementById('btnCloseOverview').onclick = () => toggleOverview(false);
+    document.getElementById('btnFullscreen').onclick = toggleFullscreen;
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'n' || e.key === 'N') {
+        toggleNotes();
+      } else if (e.key === 'o' || e.key === 'O' || e.key === 'Escape') {
+        toggleOverview();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    });
+
+    // Touch Swipe Support
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => touchStartX = e.touches[0].clientX);
+    document.addEventListener('touchend', (e) => {
+      const diff = e.changedTouches[0].clientX - touchStartX;
+      if (diff > 50) prevSlide();
+      else if (diff < -50) nextSlide();
+    });
+
+    // Init
+    updateSlide();
+  </script>
+</body>
+</html>
